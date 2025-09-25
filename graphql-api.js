@@ -1,9 +1,10 @@
-const { ApolloServer, gql } = require('apollo-server');
-const { GraphQLClient } = require('graphql-request');
+//Dependencies
+import { ApolloServer, gql } from 'apollo-server';
+import { GraphQLClient } from 'graphql-request';
 
 const postgraphileClient = new GraphQLClient('http://localhost:5000/graphql');
 
-// Define your GraphQL schema. This is the public API contract.
+//GraphQL schema
 const typeDefs = gql`
   type Author {
     id: ID!
@@ -18,8 +19,18 @@ const typeDefs = gql`
     author: Author
   }
 
+  type BookConnection {
+    nodes: [Book]
+    pageInfo: PageInfo!
+  }
+
+  type PageInfo {
+    hasNextPage: Boolean!
+    hasPreviousPage: Boolean!
+  }
+
   type Query {
-    listBooks: [Book]
+    listBooks(first: Int, after: String, genre: String, authorName: String): BookConnection
     searchBooks(query: String!): [Book]
   }
 
@@ -30,14 +41,23 @@ const typeDefs = gql`
   }
 `;
 
-// Define the resolvers. This is where the logic happens.
+//Resolvers
 const resolvers = {
   Query: {
-    listBooks: async () => {
-      // Forward the request to the PostGraphile server
+    listBooks: async (_, { first, after, genre, authorName }) => {
+      //Filter condition
+      let condition = {};
+      if (genre) {
+        condition.genre = { equalTo: genre };
+      }
+      if (authorName) {
+        condition.authorByAuthorId = { name: { equalTo: authorName } };
+      }
+
+      //Pagination and filters
       const query = gql`
-        query {
-          allBooks {
+        query AllBooks($first: Int, $after: Cursor, $condition: BookCondition) {
+          allBooks(first: $first, after: $after, condition: $condition) {
             nodes {
               id
               title
@@ -48,23 +68,52 @@ const resolvers = {
                 name
               }
             }
+            pageInfo {
+              hasNextPage
+              hasPreviousPage
+            }
           }
         }
       `;
-      const data = await postgraphileClient.request(query);
-      return data.allBooks.nodes;
+      const variables = { first, after, condition };
+      const data = await postgraphileClient.request(query, variables);
+
+      //Return data
+      return {
+        nodes: data.allBooks.nodes,
+        pageInfo: data.allBooks.pageInfo,
+      };
     },
     searchBooks: async (_, { query }) => {
-      // This part will require a custom query or a filter on the PostGraphile side.
-      // For now, we'll return an empty array as a placeholder.
-      console.log(`Searching for books with query: "${query}"`);
-      return [];
-    },
+      const searchMutation = gql`
+        query Search($query: String!) {
+          allBooks(condition: {
+            or: [
+              { title: { includesInsensitive: $query } },
+              { authorByAuthorId: { name: { includesInsensitive: $query } } }
+            ]
+          }) {
+            nodes {
+              id
+              title
+              genre
+              author: authorByAuthorId {
+                id
+                name
+              }
+            }
+          }
+        }
+      `;
+      const variables = { query };
+      const data = await postgraphileClient.request(searchMutation, variables);
+      return data.allBooks.nodes;
+    },     
   },
   Mutation: {
     addBook: async (_, { title, authorId, genre, publicationDate }) => {
       const mutation = gql`
-        mutation AddBook($title: String!, $authorId: Int!, $genre: String, $publicationDate: String) {
+        mutation AddBook($title: String!, $authorId: Int!, $genre: String, $publicationDate: Date) {
           createBook(
             input: {
               book: {
@@ -88,14 +137,47 @@ const resolvers = {
       return data.createBook.book;
     },
     updateBook: async (_, { id, authorId, genre }) => {
-      // Similar to `addBook`, you'll construct a mutation to call PostGraphile.
-      // This is a placeholder for the logic.
-      return { id, title: "Updated Placeholder", genre, authorId };
+      const mutation = gql`
+        mutation UpdateBook($id: Int!, $authorId: Int, $genre: String) {
+          updateBook(
+            input: {
+              id: $id,
+              bookPatch: {
+                authorId: $authorId,
+                genre: $genre
+              }
+            }
+          ) {
+            book {
+              id
+              title
+              genre
+              author {
+                id
+                name
+              }
+            }
+          }
+        }
+      `;
+      const variables = { id, authorId, genre };
+      const data = await postgraphileClient.request(mutation, variables);
+      return data.updateBook.book;
     },
     deleteBook: async (_, { id }) => {
-      // Logic to check if a book is checked out and then delete it via PostGraphile.
-      // This is also a placeholder for the logic.
-      return true;
+      //Delete mutation
+      const mutation = gql`
+        mutation DeleteBook($id: Int!) {
+          deleteBook(input: { id: $id }) {
+            book {
+              id
+            }
+          }
+        }
+      `;
+      const variables = { id };
+      const data = await postgraphileClient.request(mutation, variables);
+      return !!data.deleteBook; 
     },
   },
 };

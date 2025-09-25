@@ -1,18 +1,18 @@
-const express = require('express');
-const { postgraphile } = require('postgraphile');
+import express from 'express';
+import { postgraphile } from 'postgraphile';
 
 const app = express();
-const port = 5000; // Use a different port to avoid conflicts with your main server
+const port = 5000;
 
 app.use(
   postgraphile(
     process.env.DATABASE_URL || 'postgres://postgres:5862@localhost:5432/library_db',
-    ['public'], // This tells PostGraphile to expose the tables in the 'public' schema
+    ['public'],
     {
-      graphiql: true, // Enables the GraphiQL interface for testing
+      graphiql: true, 
       enhanceGraphiql: true,
       subscriptions: true,
-      watchPg: true, // Automatically updates the schema when you run new migrations
+      watchPg: true,
       graphiqlRoute: '/graphiql'
     }
   )

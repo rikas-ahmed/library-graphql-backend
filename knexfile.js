@@ -1,14 +1,14 @@
 module.exports = {
   development: {
-    client: 'pg', // Specifies PostgreSQL as the database client
+    client: 'pg',
     connection: {
-      host: 'localhost', // or your database host
+      host: 'localhost',
       user: 'postgres',
       password: '5862',
       database: 'library_db'
     },
     migrations: {
-      directory: './migrations' // Knex will look for migration files in this folder
+      directory: './migrations' 
     }
   }
 };
